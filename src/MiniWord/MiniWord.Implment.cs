@@ -81,6 +81,7 @@ namespace MiniSoftware
             ReplaceText(xmlElement, docx, tags);
         }
 
+
         /// <summary>
         /// 渲染Table
         /// </summary>
@@ -91,6 +92,9 @@ namespace MiniSoftware
         private static void GenerateTable(Table table, WordprocessingDocument docx, Dictionary<string, object> tags)
         {
             var trs = table.Descendants<TableRow>().ToArray(); // remember toarray or system will loop OOM;
+            var regexStr = "(?<={{).*?\\..*?(?=}})";
+            //计算是否只有一个cell存在指令，如果超过1个则纵向渲染，否则横向渲染。
+            bool isHorizontal = table.Elements<TableRow>().SelectMany(s => s.Elements<TableCell>()).Count(w => Regex.Matches(w.InnerText, regexStr).Count > 0) <= 1;
 
             foreach (var tr in trs)
             {
@@ -98,8 +102,9 @@ namespace MiniSoftware
                     .Replace("{{if(", "").Replace(")if", "").Replace("endif}}", "");
 
                 // 匹配list数据，格式“Items.PropName”
-                var matchs = (Regex.Matches(innerText, "(?<={{).*?\\..*?(?=}})")
+                var matchs = (Regex.Matches(innerText, regexStr)
                     .Cast<Match>().GroupBy(x => x.Value).Select(varGroup => varGroup.First().Value)).ToArray();
+
                 if (matchs.Length > 0)
                 {
                     //var listKeys = matchs.Select(s => s.Split('.')[0]).Distinct().ToArray();
@@ -124,12 +129,17 @@ namespace MiniSoftware
                         var attributeKey = matchs[0].Split('.')[0];
                         var list = tagObj as IEnumerable;
 
+                        int num = tr.Elements<TableCell>().Count();
+                        int index = 0;
+                        List<OpenXmlElement> elementList = new List<OpenXmlElement>();
+
+
                         foreach (var item in list)
                         {
                             var dic = new Dictionary<string, object>(); //TODO: optimize
 
-
                             var newTr = tr.CloneNode(true);
+
                             if (item is IDictionary)
                             {
                                 var es = (Dictionary<string, object>)item;
@@ -153,16 +163,43 @@ namespace MiniSoftware
                             ReplaceIfStatements(newTr, tags: dic);
 
                             ReplaceText(newTr, docx, tags: dic);
-                            //Fix #47 The table should be inserted at the template tag position instead of the last row
-                            if (table.Contains(tr))
+
+                            if (isHorizontal)
                             {
-                                table.InsertBefore(newTr, tr);
+                                var newTable = newTr.Descendants<Table>().FirstOrDefault();
+                                if (newTable != null)
+                                    elementList.Add(newTable.CloneNode(true));
+
+                                if (index > 0 && (index + 1) % num == 0 && elementList.Count > 0)
+                                {
+                                    var templateTr = tr.CloneNode(true);
+                                    for (var i = 0; i < elementList.Count; i++)
+                                    {
+                                        var tCell = templateTr.Elements<TableCell>().ToList()[i];
+
+                                        tCell.RemoveAllChildren();
+                                        tCell.Append(elementList[i]);
+                                    }
+                                    newTr = templateTr;
+                                    elementList = new List<OpenXmlElement>();
+
+                                    table.Append(newTr);
+                                }
                             }
                             else
                             {
-                                // If it is a nested table, temporarily append it to the end according to the original plan.
-                                table.Append(newTr);
+                                //Fix #47 The table should be inserted at the template tag position instead of the last row
+                                if (table.Contains(tr))
+                                {
+                                    table.InsertBefore(newTr, tr);
+                                }
+                                else
+                                {
+                                    // If it is a nested table, temporarily append it to the end according to the original plan.
+                                    table.Append(newTr);
+                                }
                             }
+                            index++;
                         }
 
                         tr.Remove();
@@ -192,6 +229,7 @@ namespace MiniSoftware
                 }
             }
         }
+
 
 
         /// <summary>
