@@ -91,7 +91,7 @@ namespace MiniSoftware
         /// <exception cref="NotSupportedException"></exception>
         private static void GenerateTable(Table table, WordprocessingDocument docx, Dictionary<string, object> tags)
         {
-            var trs = table.Descendants<TableRow>().ToArray(); // remember toarray or system will loop OOM;
+            var trs = table.Elements<TableRow>().ToArray(); // remember toarray or system will loop OOM;
             var regexStr = "(?<={{).*?\\..*?(?=}})";
             //计算是否只有一个cell存在指令，如果超过1个则纵向渲染，否则横向渲染。
             bool isHorizontal = table.Elements<TableRow>().SelectMany(s => s.Elements<TableCell>()).Count(w => Regex.Matches(w.InnerText, regexStr).Count > 0) <= 1;
