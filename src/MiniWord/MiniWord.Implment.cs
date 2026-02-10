@@ -94,7 +94,8 @@ namespace MiniSoftware
             var trs = table.Elements<TableRow>().ToArray(); // remember toarray or system will loop OOM;
             var regexStr = "(?<={{).*?\\..*?(?=}})";
             //计算是否只有一个cell存在指令，如果超过1个则纵向渲染，否则横向渲染。
-            bool isHorizontal = table.Elements<TableRow>().SelectMany(s => s.Elements<TableCell>()).Count(w => Regex.Matches(w.InnerText, regexStr).Count > 0) <= 1;
+            var cellList = table.Elements<TableRow>().SelectMany(s => s.Elements<TableCell>()).ToList();
+            bool isHorizontal = cellList.Count > 1 && cellList.Count(w => Regex.Matches(w.InnerText, regexStr).Count > 0) <= 1;
 
             foreach (var tr in trs)
             {
